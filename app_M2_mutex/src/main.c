@@ -1,6 +1,5 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/random/random.h>
 
 LOG_MODULE_REGISTER(demo, LOG_LEVEL_DBG);
 
@@ -10,26 +9,20 @@ LOG_MODULE_REGISTER(demo, LOG_LEVEL_DBG);
 #define ITERATION 100000 
 
 static volatile uint32_t count = 0;
+static K_MUTEX_DEFINE(counter_mutex);
 
-
-volatile void t_thread_A_fn(void *p1, void *p2, void *p3)
-{
-    for (int i = 0; i < ITERATION; i++) {
+static inline void inc_slowly() {
+        k_mutex_lock(&counter_mutex, K_FOREVER);
         volatile int local_count = count;
-        k_busy_wait(10);
+        k_busy_wait(1);
         count = local_count +1;
-    }
-
-    return;
+        k_mutex_unlock(&counter_mutex);
 }
 
-void t_thread_B_fn(void *p1, void *p2, void *p3)
+volatile void t_thread_fn(void *p1, void *p2, void *p3)
 {
-
     for (int i = 0; i < ITERATION; i++) {
-        volatile int local_count = count;
-        k_busy_wait(10);
-        count = local_count +1;
+        inc_slowly();
     }
 
     return;
@@ -37,8 +30,9 @@ void t_thread_B_fn(void *p1, void *p2, void *p3)
 
 
 
-K_THREAD_DEFINE(T_1, STACK_SIZE, t_thread_A_fn, NULL, NULL, NULL, THREAD_PRIO, 0, 0);
-K_THREAD_DEFINE(T_2, STACK_SIZE, t_thread_B_fn, NULL, NULL, NULL, THREAD_PRIO, 0, 0);
+
+K_THREAD_DEFINE(T_1, STACK_SIZE, t_thread_fn, NULL, NULL, NULL, THREAD_PRIO, 0, 0);
+K_THREAD_DEFINE(T_2, STACK_SIZE, t_thread_fn, NULL, NULL, NULL, THREAD_PRIO, 0, 0);
 
 int main(void)
 {
