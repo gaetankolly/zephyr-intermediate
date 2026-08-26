@@ -74,6 +74,7 @@ static void sensor_work_handler(struct k_work *work)
     ARG_UNUSED(work);
 
     total_processed++;
+    total_wakeups++;
 
     /*
         * This is the "real work". In Task 2 this goes into
@@ -84,7 +85,7 @@ static void sensor_work_handler(struct k_work *work)
             k_uptime_get_32());
 }
 
-K_WORK_DEFINE(sensor_work, sensor_work_handler);
+K_WORK_DELAYABLE_DEFINE(sensor_work, sensor_work_handler);
 
 
 /* ------------------------------------------------------------------ */
@@ -96,13 +97,15 @@ static void sensor_sim_fn(void *p1, void *p2, void *p3)
     for (int i = 0; i < EVENT_COUNT; i++) {
         k_msleep(SENSOR_MS);
 
-        total_events++;
-        LOG_INF("[SENSOR] event %d  tick=%u", i, k_uptime_get_32());
+        LOG_INF("[SENSOR] Burst %d", i);
 
-
-        int ret = k_work_submit(&sensor_work);
-        if (ret < 0) { LOG_ERR("submit failed: %d", ret); }
-
+        for (int j = 0; j < 5; j++) {
+            total_events++;
+            LOG_INF("[SENSOR] event %d  tick=%u", i * 5 + j, k_uptime_get_32());
+            int ret = k_work_reschedule(&sensor_work, K_MSEC(20));
+            if (ret < 0) { LOG_ERR("submit failed: %d", ret);}
+            k_msleep(11);
+        }
 
         /*
          * BONUS: Replace the single k_msleep(SENSOR_MS) above with
