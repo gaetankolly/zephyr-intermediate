@@ -56,7 +56,7 @@ void sensor_ISR_handler(struct k_timer *dummy)
         
         new_data.data = *evt_nb + 1000;
         new_data.timeStamp_ms = k_uptime_get_32();
-        zbus_chan_pub(&sensor_chan, &new_data, K_MSEC(100));
+        zbus_chan_pub(&sensor_chan, &new_data, K_NO_WAIT);
         (*evt_nb)++;
     }
 }
