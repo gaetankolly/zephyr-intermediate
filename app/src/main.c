@@ -5,10 +5,26 @@
 LOG_MODULE_REGISTER(homework, LOG_LEVEL_INF);
 
 #define STACK_SIZE            2048
-#define CONTROL_PRIORITY         7
-#define MAINTENANCE_PRIORITY     4
+#define CONTROL_PRIORITY         4
+#define MAINTENANCE_PRIORITY     7
 #define EVENT_PERIOD_MS        250
 #define MAINTENANCE_LOAD_US  45000
+/* Define a response-time guarantee. */
+#define CONTROL_DEADLINE_MS 10      
+
+/* 
+*  Homework task: Inspect thread priorities and states with the kernel shell:
+*       with native_sim use connect to kernel using the pseudo UART /dev/pts/2 -> printed out at start of the message
+*       then inspect with:
+*           > kernel thread list
+*  Homework task: Capture CTF and decode it with Babeltrace
+*        copy tracing metadata: TSDL schema describing every Zephyr CTF event type and its fields
+*           > cp ../deps/zephyr/subsys/tracing/ctf/tsdl/metadata trace_data/
+*        Capture CTF events into channel0_0: binary stream recorded at runtime
+*           >  ./build/zephyr/zephyr.exe -trace-file=trace_data/channel0_0
+*        use babektrace:
+*           > babeltrace trace_data/      
+*/
 
 struct control_event {
     uint32_t seq;
@@ -42,7 +58,8 @@ static void event_timer_expiry(struct k_timer *timer)
     /* Both threads become ready when the timer interrupt returns. */
     k_sem_give(&maintenance_start);
 
-    /* TODO: Add an application trace event for this sequence. */
+    /* Add an application trace event for this sequence. */
+    sys_trace_named_event("Event_ready", event.seq, event.ready_ms);
 }
 
 K_TIMER_DEFINE(event_timer, event_timer_expiry, NULL);
@@ -55,6 +72,8 @@ static void control_fn(void *p1, void *p2, void *p3)
 {
     ARG_UNUSED(p1); ARG_UNUSED(p2); ARG_UNUSED(p3);
 
+    uint32_t deadlineMiss_cnt = 0;
+
     while (true) {
         struct control_event event;
         int ret = k_msgq_get(&control_queue, &event, K_FOREVER);
@@ -66,10 +85,17 @@ static void control_fn(void *p1, void *p2, void *p3)
 
         LOG_INF("[CONTROL] processed seq=%u", event.seq);
 
-        /* TODO: Define a response-time guarantee. */
-        /* TODO: Measure latency and count every deadline miss. */
-        /* TODO: Rate-limit repeated warning messages. */
-        /* TODO: Add an application trace event for completion. */
+        /* Measure latency and count every deadline miss. */
+        uint32_t latency_ms = k_uptime_get_32() - event.ready_ms;
+        if (latency_ms > CONTROL_DEADLINE_MS) 
+        {
+            deadlineMiss_cnt++;
+            /* Rate-limit repeated warning messages. */
+            LOG_WRN_RATELIMIT("deadline_miss count=%u seq=%u latency_ms=%u", deadlineMiss_cnt, event.seq, latency_ms);
+        }
+        
+        /* Add an application trace event for completion. */
+        sys_trace_named_event("Event_done", event.seq, latency_ms);
     }
 }
 
