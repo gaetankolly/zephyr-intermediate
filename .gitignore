@@ -1,5 +1,6 @@
 # Build
 build
+twister-out*
 
 # West files
 .west
